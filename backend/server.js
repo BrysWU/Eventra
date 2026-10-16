@@ -15,7 +15,17 @@ const client=new MongoClient(MONGODB_URI);await client.connect();const db=client
 await Promise.all([db.collection('users').createIndex({email:1},{unique:true}),db.collection('sites').createIndex({ownerId:1}),db.collection('events').createIndex({siteId:1,createdAt:-1}),db.collection('events').createIndex({createdAt:1},{expireAfterSeconds:60*60*24*30})]);
 const app=express(),server=createServer(app),allowed=DASHBOARD_ORIGIN.split(',').map(x=>x.trim());
 const io=new Server(server,{cors:{origin:allowed}});
-app.use(cors({origin:(origin,cb)=>cb(null,!origin||allowed.includes(origin))}));app.use(express.json({limit:'16kb'}));
+// Collection is called from customer websites, not only the dashboard.
+// CORS allows the browser request; /api/collect still checks the registered site origin.
+app.use('/api/collect', cors({
+  origin: true,
+  methods: ['POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+  optionsSuccessStatus: 204
+}));
+// All other HTTP API routes remain restricted to the dashboard origin(s).
+app.use(cors({origin:(origin,cb)=>cb(null,!origin||allowed.includes(origin))}));
+app.use(express.json({limit:'16kb'}));
 const auth=(req,res,next)=>{try{const t=(req.headers.authorization||'').replace(/^Bearer /,'');req.user=jwt.verify(t,JWT_SECRET);next()}catch{res.status(401).json({error:'Unauthorized'})}};
 const token=u=>jwt.sign({id:String(u._id),email:u.email},JWT_SECRET,{expiresIn:'7d'});
 const safeUser=u=>({id:String(u._id),email:u.email});
